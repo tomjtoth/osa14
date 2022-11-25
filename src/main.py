@@ -14,35 +14,280 @@ import pygame
 from random import randint
 
 
+
+class Collectible:
+    spr = pygame.image.load("kolikko.png")
+
+class Weapon:
+    def __init__(self, chargeable = False):
+        self.level = 0
+        self.charging = False
+        self._chargeable = chargeable
+
+class Eye(Weapon):
+
+    cost = 30
+
+    left = (
+        # standing still
+        (17, 14),
+        
+        # tilted 5 deg
+        (
+            (20,14), (15, 15)
+        ),
+
+
+        # tilted 10 deg
+        (
+            (22,14), (13, 16)
+        )
+    )
+
+    right = (
+        # standing still
+        (32, 14),
+        
+        # tilted 5 deg
+        (
+            (34,16), (29, 14)
+        ),
+
+
+        # tilted 10 deg
+        (
+            (36,16), (27, 14)
+        )
+    )
+
+    def __init__(self, side: int):
+        super().__init__()
+        self.pos = Eye.left if side == 0 else Eye.right
+
 class Character:
     
     def __init__(self):
+        global sx, sy
 
-        # should have gone with simple booleans....
-        self.movement = 0b000000
+        self._energy = \
+        self._max_energy = \
+        self._integrity = \
+        self._max_integrity = 1000
+        
+        self._up = False
+        self._down = False
+        self._left = False
+        self._right = False
+        self._running = False
+        #self._dashing = False
 
-    def _up():
-        return True if self._movement & 0b000001 == 0b000001 else False
+        self._speeds = [
+            2,   # walking
+            3    # running
+        ]
+        self._mov_anim_tick = 0
+        self._pos = [randint(0, sx), randint(0, sy)]
 
-    def _down():
-        return True if self._movement & 0b000010 == 0b000010 else False
+    def _translate(self):
+        global sx, sy
 
-    def _left():
-        return True if self._movement & 0b000100 == 0b000100 else False
+        px = self._pos[0]
+        py = self._pos[1]
+        v = self._speeds[1 if self._running else 0]
+
+        state = 0
+
+        if self._up:
+            if self._pos[1] - v >= 0:
+                self._pos[1] -= v
+            else:
+                self._up = False
+
+        if self._down:
+            if self._pos[1] + v <= sy:
+                self._pos[1] += v
+            else:
+                self._down = False
+
+        if self._left:
+            if self._pos[0] - v >=0:
+                self._pos[0] -= v
+            else:
+                self._left = False
+
+        if self._right:
+            if self._pos[0] + v <= sx:
+                self._pos[0] += v
+            else:
+                self._right = False
+        
+        if self._left or self._right or self._up or self._down:
+            self._mov_anim_tick += 1
+            state += 1
+
+            if self._running:
+                state += 1
+        
+        else:
+            self._mov_anim_tick = 0
+        
+        return state
+  
+class Enemy(Character):
+
+    # standing still
+    spr_mov = [[pygame.image.load("hirvio.png")]]
+    spr_mov[0].append(pygame.transform.flip(spr_mov[0][0], True, False))
+    # walking
+    spr_mov.append([pygame.transform.rotate(spr_mov[0][0],-5), pygame.transform.rotate(spr_mov[0][0],5)])
+    spr_mov.append([pygame.transform.rotate(spr_mov[0][1],-5), pygame.transform.rotate(spr_mov[0][1],5)])
+    # running
+    spr_mov.append([pygame.transform.rotate(spr_mov[0][0],-10), pygame.transform.rotate(spr_mov[0][0],10)])
+    spr_mov.append([pygame.transform.rotate(spr_mov[0][1],-10), pygame.transform.rotate(spr_mov[0][1],10)])
+
+class Player(Character):
+
+    # standing still
+    spr_mov = [pygame.image.load("robo.png")]
+    # walking
+    spr_mov.append([pygame.transform.rotate(spr_mov[0],-5), pygame.transform.rotate(spr_mov[0],5)])
+    # running
+    spr_mov.append([pygame.transform.rotate(spr_mov[0],-10), pygame.transform.rotate(spr_mov[0],10)])
+
+    width = spr_mov[0].get_width()
+    height = spr_mov[0].get_height()
+
+    def __init__(self):
+        super().__init__()
+        self._eyes = [Eye(0), Eye(1)]
+        self._energy_regen = 1
+
+    def __translate(self):
+        global naytto
+        
+        state = super()._translate()
+        
+        # standing still
+        if state == 0:
+            spr = Player.spr_mov[0]
+        
+        # walking
+        elif state == 1:
+            spr = Player.spr_mov[1][self._mov_anim_tick//5 % 2]
+        
+        # running
+        elif state == 2:
+            spr = Player.spr_mov[2][self._mov_anim_tick//5 % 2]
+
+        # draw the character
+        naytto.blit(spr, (self._pos[0], self._pos[1]))
+
+    def handle_events(self):
+        global ev_list
+
+        for ev in ev_list:
+            if ev.type == pygame.KEYDOWN:
+                if ev.key == pygame.K_w:
+                    self._up = True
+                if ev.key == pygame.K_s:
+                    self._down = True
+                if ev.key == pygame.K_a:
+                    self._left = True
+                if ev.key == pygame.K_d:
+                    self._right = True
+                if ev.key == pygame.K_LSHIFT:
+                    self._running = True
+                if ev.key == pygame.K_SPACE:
+                    self._dashing = True
+                
+            if ev.type == pygame.KEYUP:
+                if ev.key == pygame.K_w:
+                    self._up = False
+                if ev.key == pygame.K_s:
+                    self._down = False
+                if ev.key == pygame.K_a:
+                    self._left = False
+                if ev.key == pygame.K_d:
+                    self._right = False
+                if ev.key == pygame.K_LSHIFT:
+                    self._running = False
+
+            if ev.type == pygame.MOUSEBUTTONDOWN:
+                if ev.button == pygame.BUTTON_LEFT:
+                    self._eyes[0].charging = True
+
+                if ev.button == pygame.BUTTON_RIGHT:
+                    self._eyes[1].charging = True
+
+            if ev.type == pygame.MOUSEBUTTONUP:
+                if ev.button == pygame.BUTTON_LEFT:
+                    self._eyes[0].charging = False
+                    
+                if ev.button == pygame.BUTTON_RIGHT:
+                    self._eyes[1].charging = False
+        
+        
+        self.__translate()
+        self.__manage_energy()
     
-    def _right():
-        return True if self._movement & 0b001000 == 0b001000 else False
+    def __shoot(self, eye: Eye):
+        global crossh, naytto, float_txt, persistents
+        
+        if self._running:
+            pos = eye.pos[2][self._mov_anim_tick//5 % 2]
+        elif self._up or self._down or self._left or self._right:
+            pos = eye.pos[1][self._mov_anim_tick//5 % 2]
+        else:
+            pos = eye.pos[0]
 
-    def _running():
-        return True if self._movement & 0b010000 == 0b010000 else False
 
-    def _dashing():
-        return True if self._movement & 0b100000 == 0b100000 else False
+        # draw line from the eye to the mouse cursor
+        pygame.draw.line(naytto, (255, 0, 0)
+            , (self._pos[0]+pos[0], self._pos[1]+pos[1])
+            , crossh
+            , 10)
 
+        # firing sound made visible
+        persistents.append([
+            
+            # the pre-rendered text itself
+            float_txt[randint(0, len(float_txt)-1)], 
+            
+            # n frames to show the text near the robot
+            15
 
-print(0b10 & 0b01)
+        ])
+        
+    def __manage_energy(self):
+        
+        moving = self._up or self._down or self._left or self._right
+        
+        # regenerating energy while standing still
+        if self._energy < self._max_energy and not moving:
+            self._energy += self._energy_regen
 
-exit()
+        if self._running and moving:
+            if self._energy > 0:
+                self._energy -= self._energy_regen * 2
+            else:
+                self._running = False
+
+        for eye in self._eyes:
+            if eye.charging:
+                if self._energy > 0:
+                    self._energy -= 1
+                    eye.level += 1
+                else:
+                    eye.charging = False
+                    
+                if eye.level == Eye.cost:
+                    self.__shoot(eye)
+                    eye.level = 0
+                    eye.charging = False
+            else:
+                if eye.level -1 >= 0:
+                    eye.level -= 1
+
 
 
 pygame.init()
@@ -50,273 +295,62 @@ naytto = pygame.display.set_mode((1024, 768))
 pygame.display.set_caption("unambitious osa14 yritys")
 pygame.mouse.set_visible(False)
 kello = pygame.time.Clock()
-fHUD = pygame.font.SysFont("Arial", 24)
-fPopUp = pygame.font.SysFont("Arial", 34)
-
-mov_anim_tick = 0
-robo_still = pygame.image.load("robo.png")
-robo_walk = [pygame.transform.rotate(robo_still,-5), pygame.transform.rotate(robo_still,5)]
-robo_run = [pygame.transform.rotate(robo_still,-10), pygame.transform.rotate(robo_still,10)]
+font_hud = pygame.font.SysFont("Arial", 24)
+font_pop_up = pygame.font.SysFont("Arial", 34)
 
 # näitä vilautetaan kun ammutaan
 float_txt = [
-    pygame.transform.rotate(fPopUp.render(x, True, (255, 255, 255)),randint(-15,15)) \
+    pygame.transform.rotate(font_pop_up.render(x, True, (255, 255, 255)), randint(-15,15)) \
     for x in "PEW!,PSSHT!,BZZZZ!,ZAP!,KSSSH!,KFFF!,AAAARGH!!!!".split(",")
 ]
 persistents = []
 crossh = (0,0)
 
+sx = naytto.get_width() - Player.width
+sy = naytto.get_height() - Player.height
 
-
-eyes = [{
-        'level': 0,
-        'charging': False,
-
-        # GIMP:sta tyyliin suurin piirtein
-        'pos': (
-            # standing still
-            (17, 14),
-            
-            # tilted 5 deg
-            (
-                (20,14), (15, 15)
-            ),
-
-
-            # tilted 10 deg
-            (
-                (22,14), (13, 16)
-            )
-        )
-    },{
-        'level': 0,
-        'charging': False,
-        'pos': (
-            # standing still
-            (32, 14),
-            
-            # tilted 5 deg
-            (
-                (34,16), (29, 14)
-            ),
-
-
-            # tilted 10 deg
-            (
-                (36,16), (27, 14)
-            )
-        )
-    }
-]
-
-rw = robo_still.get_width()
-rh = robo_still.get_height()
-sx = naytto.get_width() - rw
-sy = naytto.get_height() - rh
-
-
-# player pos and stats
-x = randint(0, sx)
-y = randint(0, sy)
-speed0 = speed = 2
-max_energy = energy = 100
-max_hull = hull = 1000
-points = 0
-eye_cost = 30
-
-up = down = left = right = running = dashing = False
-
-
-def use_energy(diff: int):
-    global energy, max_energy, speed, speed0
-    if energy + diff in range(0, max_energy+1):
-        energy += diff
-        return True
-    else:
-        # revert to walking
-        speed = speed0
-    return False
-
-def shoot(eye: dict):
-    global x, y, rw, crossh, naytto, running, left, right, up, down, mov_anim_tick, float_txt, persistents
-    
-    if running:
-        pos = eye["pos"][2][mov_anim_tick//5 % 2]
-    elif up or down or left or right:
-        pos = eye["pos"][1][mov_anim_tick//5 % 2]
-    else:
-        pos = eye["pos"][0]
-
-
-    # draw line from the eye to the mouse cursor
-    pygame.draw.line(naytto, (255, 0, 0)
-        , (x+pos[0], y+pos[1])
-        , crossh
-        , 10)
-
-    # firing sound made visible
-    persistents.append([
-        
-        # the pre-rendered text itself
-        float_txt[randint(0, len(float_txt)-1)], 
-        
-        # n frames to show the text near the robot
-        15
-
-    ])
-    
-def weapons():
-    global eyes, eye_cost
-    for eye in eyes:
-        if eye["charging"]:
-            if use_energy(-1):
-                eye["level"] += 1
-            if eye["level"] == eye_cost:
-                shoot(eye)
-                eye["level"] = 0
-                eye["charging"] = False
-        else:
-            if eye["level"] -1 >= 0:
-                eye["level"] -= 1
-
-
+player = Player()
 
 while True:
     
-    for tapahtuma in pygame.event.get():
-        if tapahtuma.type == pygame.KEYDOWN:
-            if tapahtuma.key == pygame.K_ESCAPE:
+    # caching all the events
+    ev_list = pygame.event.get()
+    for ev in ev_list:
+        if ev.type == pygame.QUIT \
+        or ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE:
                 exit()
-            if tapahtuma.key == pygame.K_w:
-                up = True
-            if tapahtuma.key == pygame.K_s:
-                down = True
-            if tapahtuma.key == pygame.K_a:
-                left = True
-            if tapahtuma.key == pygame.K_d:
-                right = True
-            if tapahtuma.key == pygame.K_LSHIFT:
-                speed *= 2
-                running = True
-            if tapahtuma.key == pygame.K_SPACE:
-                speed *= 20
-                dashing = True
-            
 
-        if tapahtuma.type == pygame.KEYUP:
-            if tapahtuma.key == pygame.K_w:
-                up = False
-            if tapahtuma.key == pygame.K_s:
-                down = False
-            if tapahtuma.key == pygame.K_a:
-                left = False
-            if tapahtuma.key == pygame.K_d:
-                right = False
-            if tapahtuma.key == pygame.K_LSHIFT:
-                speed /= 2
-                running = False
-
-        if tapahtuma.type == pygame.MOUSEMOTION:
-            crossh = tapahtuma.pos
-        
-        if tapahtuma.type == pygame.MOUSEBUTTONDOWN:
-            if tapahtuma.button == pygame.BUTTON_LEFT:
-                eyes[0]['charging'] = True
-                speed /= 2
-
-            if tapahtuma.button == pygame.BUTTON_RIGHT:
-                eyes[1]['charging'] = True
-                speed /= 2
-
-        if tapahtuma.type == pygame.MOUSEBUTTONUP:
-
-            if tapahtuma.button == pygame.BUTTON_LEFT:
-                eyes[0]['charging'] = False
-                speed *= 2
-                
-            if tapahtuma.button == pygame.BUTTON_RIGHT:
-                eyes[1]['charging'] = False
-                speed *= 2
-
-        if tapahtuma.type == pygame.QUIT:
-            exit()
-
-
-    if dashing:
-        if not use_energy(-speed):
-            speed /= 20
-
-    if up:
-        if y-speed >= 0:
-            y -= speed
-        else:
-            up = False
-
-    if down:
-        if y+speed <= sy:
-            y += speed
-        else:
-            down = False
-
-    if left:
-        if x-speed >=0:
-            x -= speed
-        else:
-            left = False
-
-    if right:
-        if x+speed <= sx:
-            x += speed
-        else:
-            right = False
-    
-    if left or right or up or down:
-        mov_anim_tick += 1
-        
-        if running:
-            use_energy(-speed)
-            robo = robo_run[mov_anim_tick//5 % 2]
-        elif dashing:
-            dashing = False
-        else:
-            speed = speed0
-            robo = robo_walk[mov_anim_tick//5 % 2]
-    else:
-        robo = robo_still
-        mov_anim_tick = 0
-        use_energy(speed)
+        elif ev.type == pygame.MOUSEMOTION:
+            crossh = ev.pos
 
 
     naytto.fill((40, 40, 40))
     
-    naytto.blit(robo, (x, y))
+    player.handle_events()
 
-    weapons()
+    naytto.blit(font_hud.render(
+        f"INTEGRITY: {player._integrity:.0f}, ENERGY: {player._energy:.0f}, POINTS: x", 
+        True, (255, 255, 255)), (10, sy+Player.height-20))
 
-    hud = fHUD.render(f"INTEGRITY: {hull:.0f}, ENERGY: {energy:.0f}, POINTS: {points}", True, (255, 255, 255))
-    naytto.blit(hud, (10, sy+rh-20))
 
-
-    # draw crosshair, dimming hor and ver hairs by charge level
-    pygame.draw.line(naytto, (255 - eyes[0]['level'], 255, 255)
+    # draw crosshair
+    pygame.draw.line(naytto, (255 - player._eyes[0].level, 255, 255)
         , (crossh[0]-20, crossh[1])
         , (crossh[0]+20, crossh[1])
         , 2)
     
-    pygame.draw.line(naytto, (255 - eyes[1]['level'], 255, 255)
+    pygame.draw.line(naytto, (255 - player._eyes[1].level, 255, 255)
         , (crossh[0], crossh[1]-20)
         , (crossh[0], crossh[1]+20)
         , 2)
-
 
     cleanup_persistents = []
 
     # show floating text messages for a certain amount of frames
     for obj in persistents:
         if obj[1] > 0:
-            naytto.blit(obj[0], (x + rw, y - 20)) 
+            naytto.blit(obj[0], (player._pos[0] + Player.width, player._pos[1] - 20)) 
             obj[1] -= 1
-
         else:
             cleanup_persistents.append(obj)
     
