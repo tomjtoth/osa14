@@ -11,12 +11,32 @@
 
 # TEE PELI TÄHÄN
 import pygame
-from random import randint
+from random import randint, randrange
 
 
 
 class Collectible:
     spr = pygame.image.load("kolikko.png")
+    width = spr.get_width()
+    height = spr.get_height()
+
+    def __init__(self):
+        global sx, sy
+        self._value = 1
+        self._pos = (randint(0,sx-1), randint(0,sy-1))
+        self._collected = False
+
+    def redraw(self):
+        #global naytto
+
+        naytto.blit(Collectible.spr, self._pos)
+
+class PowerUp(Collectible):
+    types = ['max_energy', 'max_integrity', 'energy', 'integrity']
+
+    def __init__(self):
+        self._value = 10
+        self._type = PowerUp.types[randint(0,len(PowerUp.types)-1)]
 
 class Weapon:
     def __init__(self, chargeable = False):
@@ -71,8 +91,8 @@ class Character:
 
         self._energy = \
         self._max_energy = \
-        self._integrity = \
-        self._max_integrity = 1000
+        self._health = \
+        self._max_health = 1000
         
         self._up = False
         self._down = False
@@ -144,6 +164,11 @@ class Enemy(Character):
     # running
     spr_mov.append([pygame.transform.rotate(spr_mov[0][0],-10), pygame.transform.rotate(spr_mov[0][0],10)])
     spr_mov.append([pygame.transform.rotate(spr_mov[0][1],-10), pygame.transform.rotate(spr_mov[0][1],10)])
+
+    def handle_events(self):
+        global naytto
+
+        naytto.blit(Enemy.spr_mov[0][0], self._pos)
 
 class Player(Character):
 
@@ -311,6 +336,10 @@ sy = naytto.get_height() - Player.height
 
 player = Player()
 
+# spawn collectibles
+collectibles = [Collectible() for _ in range(randint(10,20))]
+enemies = [Enemy() for _ in range(randint(10,20))]
+
 while True:
     
     # caching all the events
@@ -326,10 +355,18 @@ while True:
 
     naytto.fill((40, 40, 40))
     
+    
+    for collectible in collectibles:
+        collectible.redraw()
+
+    for enemy in enemies:
+        enemy.handle_events()
+    
     player.handle_events()
+    
 
     naytto.blit(font_hud.render(
-        f"INTEGRITY: {player._integrity:.0f}, ENERGY: {player._energy:.0f}, POINTS: x", 
+        f"INTEGRITY: {player._health:.0f}, ENERGY: {player._energy:.0f}, POINTS: x", 
         True, (255, 255, 255)), (10, sy+Player.height-20))
 
 
