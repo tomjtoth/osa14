@@ -13,6 +13,38 @@
 import pygame
 from random import randint
 
+
+class Character:
+    
+    def __init__(self):
+
+        # should have gone with simple booleans....
+        self.movement = 0b000000
+
+    def _up():
+        return True if self._movement & 0b000001 == 0b000001 else False
+
+    def _down():
+        return True if self._movement & 0b000010 == 0b000010 else False
+
+    def _left():
+        return True if self._movement & 0b000100 == 0b000100 else False
+    
+    def _right():
+        return True if self._movement & 0b001000 == 0b001000 else False
+
+    def _running():
+        return True if self._movement & 0b010000 == 0b010000 else False
+
+    def _dashing():
+        return True if self._movement & 0b100000 == 0b100000 else False
+
+
+print(0b10 & 0b01)
+
+exit()
+
+
 pygame.init()
 naytto = pygame.display.set_mode((1024, 768))
 pygame.display.set_caption("unambitious osa14 yritys")
