@@ -74,7 +74,7 @@ def new_game(difficulty = 2):
     door = Door()
 
     # spawn collectibles
-    collectibles = [[Collectible(), PowerUp()][randint(0,1)] for _ in range(randint(10,20))]
+    collectibles = [[Collectible(), PUEnergy(), PUHealth(), PUMEnergy(), PUMHealth()][randint(0,4)] for _ in range(randint(10,20))]
     enemies = [[Enemy(),Stalker()][randint(0,1)] for _ in range(randint(5,10))]
 
     Enemy.timeout = Enemy.original_timeout
@@ -173,7 +173,6 @@ distance = lambda x, y: math.sqrt(
 
 class Collectible:
     sprites = [pygame.image.load("kolikko.png")]
-    #sprites.append(pygame.)
     width = sprites[0].get_width()
     height = sprites[0].get_height()
 
@@ -188,21 +187,38 @@ class Collectible:
 
     def update(self):
         if not self._collected:
-            self.__get_collected()
+            self._get_collected()
             naytto.blit(Collectible.sprites[0], self._pos)
 
-    def __get_collected(self):
+    def _get_collected(self):
         if distance(self, player) < 50:
             player._score += self._value
             self._collected = True
 
 class PowerUp(Collectible):
-    types = ['max_energy', 'max_integrity', 'energy', 'integrity']
-
     def __init__(self):
         super().__init__()
         self._value = 10
-        self._type = PowerUp.types[randint(0, len(PowerUp.types) - 1)]
+
+class PUEnergy(PowerUp):
+    def __get_collected(self):
+        super()._get_collected()
+        player._energy += 100
+
+class PUMEnergy(PUEnergy):
+    def __get_collected(self):
+        super()._get_collected()
+        player._max_energy += 100
+
+class PUHealth(PowerUp):
+    def __get_collected(self):
+        super()._get_collected()
+        player._health += 100
+
+class PUMHealth(PUHealth):
+    def __get_collected(self):
+        super()._get_collected()
+        player._max_health += 100
 
 class Door():
     sprite = pygame.image.load("ovi.png")
