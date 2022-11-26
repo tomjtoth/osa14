@@ -1,3 +1,5 @@
+# TODO: repaint stalker to different color; powerups in different colors and implement functionality
+
 import pygame, math
 from random import randint, randrange
 
@@ -73,7 +75,7 @@ def new_game(difficulty = 2):
 
     # spawn collectibles
     collectibles = [[Collectible(), PowerUp()][randint(0,1)] for _ in range(randint(10,20))]
-    enemies = [Enemy() for _ in range(randint(5,10))]
+    enemies = [[Enemy(),Stalker()][randint(0,1)] for _ in range(randint(5,10))]
 
     Enemy.timeout = Enemy.original_timeout
 
@@ -380,20 +382,20 @@ class Enemy(Character):
     def __seek(self):
         dp = distance(self, player)
 
-        if player._health == 0 or dp > Enemy.seekout_range:
+        if player._health == 0 or dp > self.__class__.seekout_range:
             for c in collectibles:
                 if c._collected:
                     continue
 
                 dc = distance(self, c)
-                if dc in range(50, Enemy.seekout_range):
+                if dc in range(50, self.__class__.seekout_range):
                     self.__close_in(c,self._speeds[0])
                     break
 
             self.__idle()
             
         else:
-            if dp > Enemy.hunting_range:
+            if dp > self.__class__.hunting_range:
                 self.__close_in(player, self._speeds[0 if dp > 100 else 1])
             else:
                 player._health -= 1 # attack
@@ -424,6 +426,8 @@ class Enemy(Character):
         else:
             self._pos[1] -= v
 
+        self.__idle()
+
     def got_shot(self):
         global persistents, yells
 
@@ -448,7 +452,17 @@ class Enemy(Character):
             15
 
         ])
-     
+
+class Stalker(Enemy):
+
+    seekout_range = Enemy.seekout_range * 3
+    hunting_range = Enemy.hunting_range
+
+    def __init__(self):
+        super().__init__()
+        self._health = self._max_health = 500
+        self._speeds = [1, 2]
+
 class Player(Character):
 
     # standing still
