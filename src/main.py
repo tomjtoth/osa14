@@ -1,7 +1,7 @@
 # TODO: repaint stalker to different color; powerups in different colors and implement functionality
 
 import pygame, math
-from random import randint, randrange
+from random import randint, randrange, choice
 
 pygame.init()
 naytto = pygame.display.set_mode((1024, 768))
@@ -13,7 +13,8 @@ font_pop_up = pygame.font.SysFont("Arial", 34)
 
 render = lambda s: pygame.transform.rotate(font_pop_up.render(s, True, (255, 255, 255)), randint(-15,15))
 
-yells = [render(x) for x in "PEW!,PSSHT!,BZZZZ!,ZAP!,KSSSH!,KFFF!,AAAARGH!!!!,BOO!,BOOHOO!!!".split(",")]
+# mixed usage, prolly should have separated them
+pre_rendered_texts = [render(x) for x in "PEW!,PSSHT!,BZZZZ!,ZAP!,KSSSH!,KFFF!,AAAARGH!!!!,BOO!,BOOHOO!!!,REPAIR KIT!,BATTERIES!,HULL UPGRADED!,BATTERIES EXTENDED!,IMPROVED RECHARGE!,FIRE POWER UPGRADED!,CHEAPER ATTACKS!".split(",")]
 
 main_menu_text = """Keys:
 
@@ -74,8 +75,9 @@ def new_game(difficulty = 2):
     door = Door()
 
     # spawn collectibles
-    collectibles = [[Collectible(), PUEnergy(), PUHealth(), PUMEnergy(), PUMHealth()][randint(0,4)] for _ in range(randint(10,20))]
-    enemies = [[Enemy(),Stalker()][randint(0,1)] for _ in range(randint(5,10))]
+    collectibles = [choice([Collectible(), PUEnergy(), PUHealth(), PUMEnergy(), PUMHealth(), PUFirePower(), PUWeaponCost(), PUEnergyRegen()]) for _ in range(randint(10,20))]
+
+    enemies = [[Enemy(),Stalker()][randint(0,1)] for _ in range(randint(5,10))] if False else []
 
     Enemy.timeout = Enemy.original_timeout
 
@@ -163,7 +165,6 @@ def congrats():
     pygame.display.flip()
     pygame.time.wait(3000)
 
-
 # Pythagoras + center points (?)
 distance = lambda x, y: math.sqrt(
     math.pow((x._pos[0] + x.__class__.width/2) - (y._pos[0] + y.__class__.width/2), 2) # x^2
@@ -194,31 +195,93 @@ class Collectible:
         if distance(self, player) < 50:
             player._score += self._value
             self._collected = True
+            return True
+        return False
 
 class PowerUp(Collectible):
     def __init__(self):
         super().__init__()
         self._value = 10
 
+    def _get_collected(self):
+        if super()._get_collected():
+            global persistents
+            if isinstance(self, PUHealth):
+                i = -7
+            elif isinstance(self, PUEnergy):
+                i = -6
+            elif isinstance(self, PUMHealth):
+                i = -5
+            elif isinstance(self, PUMEnergy):
+                i = -4
+            elif isinstance(self, PUEnergyRegen):
+                i = -3
+            elif isinstance(self, PUFirePower):
+                i = -2
+            elif isinstance(self, PUWeaponCost):
+                i = -1
+
+            persistents.append([
+                
+                # the pre-rendered text itself, except for AARGH which is preserved for death of player
+                pre_rendered_texts[i],
+
+                # the text will be positioned in relation to this object:
+                self, 
+                
+                # n frames to show the text near the robot
+                50
+
+            ])
+            return True
+
+        return False
+
 class PUEnergy(PowerUp):
     def __get_collected(self):
-        super()._get_collected()
-        player._energy += 100
+        if super()._get_collected():
+            player._energy += 100
+            print("Received 100 energy")
+            return True
+        return False
 
 class PUMEnergy(PUEnergy):
     def __get_collected(self):
-        super()._get_collected()
-        player._max_energy += 100
+        if super()._get_collected():
+            player._max_energy += 100
+            print(f"Max energy upgraded to {player._max_energy}")
 
 class PUHealth(PowerUp):
     def __get_collected(self):
-        super()._get_collected()
-        player._health += 100
+        if super()._get_collected():
+            player._health += 100
+            print("Received 100 health")
+            return True
+        return False
 
 class PUMHealth(PUHealth):
     def __get_collected(self):
-        super()._get_collected()
-        player._max_health += 100
+        if super()._get_collected():
+            player._max_health += 100
+            print(f"Max health upgraded to {player._max_health}")
+
+class PUFirePower(PowerUp):
+    def __get_collected(self):
+        if super()._get_collected():
+            player._fire_power *= 2
+            print(f"Fire power upgraded to {player._fire_power}")
+
+class PUWeaponCost(PowerUp):
+    def __get_collected(self):
+        if super()._get_collected():
+            player._cost_multiplier /= 2
+            print(f"Laser cost decreased to {player._cost_multiplier*2:.0f}%")
+
+class PUEnergyRegen(PowerUp):
+    def __get_collected(self):
+        if super()._get_collected():
+            player._energy_regen *= 2
+            print(f"Energy regeneration upgraded to {player._energy_regen}")
 
 class Door():
     sprite = pygame.image.load("ovi.png")
@@ -297,6 +360,10 @@ class Eye(Weapon):
     def __init__(self, side: int):
         super().__init__()
         self.pos = Eye.left if side == 0 else Eye.right
+
+# TODO
+class CloseCombat(Weapon):
+    cost = 10
 
 class Character:
     
@@ -445,12 +512,12 @@ class Enemy(Character):
         self.__idle()
 
     def got_shot(self):
-        global persistents, yells
+        global persistents, pre_rendered_texts
 
-        self._health -= Eye.cost*player._damage_multiplier*2
+        self._health -= Eye.cost*player._fire_power*2
 
         if self._health <= 0:
-            txt = yells[randint(-2, -1)]
+            txt = pre_rendered_texts[randint(7,8)]
             player._score += 50
         else:
             txt = render(f"{self._health}/{self._max_health}")
@@ -502,7 +569,8 @@ class Player(Character):
         self._energy_regen = 1
         self._score = 0
         self._pos = [randint(0, Player.sx), randint(0, Player.sy)]
-        self._damage_multiplier = 1
+        self._fire_power = 1
+        self._cost_multiplier = 1
 
     def __translate(self):
         global naytto
@@ -587,7 +655,7 @@ class Player(Character):
         self.__translate()
     
     def __shoot(self, eye: Eye):
-        global crossh, naytto, yells, persistents, enemies
+        global crossh, naytto, pre_rendered_texts, persistents, enemies
         
         if self._running:
             pos = eye.pos[2][self._mov_anim_tick//5 % 2]
@@ -607,7 +675,7 @@ class Player(Character):
         persistents.append([
             
             # the pre-rendered text itself, except for AARGH which is preserved for ghosts
-            yells[randint(0, len(yells)-4)],
+            pre_rendered_texts[randint(0, 5)],
 
             # the text will be positioned in relation to this object:
             self, 
@@ -641,7 +709,7 @@ class Player(Character):
         for eye in self._eyes:
             if eye.charging:
                 if self._energy > 0:
-                    self._energy -= 1
+                    self._energy -= 1 * self._cost_multiplier
                     eye.level += 1
                 else:
                     eye.charging = False
@@ -653,6 +721,5 @@ class Player(Character):
             else:
                 if eye.level -1 >= 0:
                     eye.level -= 1
-
 
 main_menu()
