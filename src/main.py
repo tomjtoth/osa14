@@ -17,16 +17,17 @@ main_menu_text = """Keys:
 
 W, A, S, D - up, down, left, right
 LSHIFT - run
-LMB, RMB - charge and fire left, right eyes
+LMB, RMB - charge (takes about 3 seconds) and fire left, right eyes
 
-R - restart / reset
+R - reset game
 ESC - exit
 ENTER - new game
 
 Gameplay:
 
-1. get them coins
-2. exit through the door
+1. collect all coins
+2. door appears
+3. exit through the door
 """
 
 crossh = (0,0)
@@ -36,7 +37,7 @@ def main_menu():
         naytto.fill((0,0,0))
         y = 10
         for s in main_menu_text.split("\n"):
-            naytto.blit(font_hud.render(s,True, (255, 255, 255)), (10, y))
+            naytto.blit(font_pop_up.render(s,True, (255, 255, 255)), (10, y))
             y += 24
 
         pygame.display.flip()
@@ -109,8 +110,11 @@ def new_game(difficulty = 2):
 
         player.update()
 
-        door.update()
+        if door.update():
+            congrats()
+            return False
 
+        
 
         naytto.blit(font_hud.render(
             f"INTEGRITY: {player._health:.0f}, ENERGY: {player._energy:.0f}, POINTS: {player._score:.0f}", 
@@ -147,12 +151,22 @@ def new_game(difficulty = 2):
 
         kello.tick(60)
 
+def congrats():
+    naytto.fill((0,0,0))
+    y = 320
+    for s in f"CONGRATULATIONS!\nYOU DID IT!\nYOUR SCORE: {player._score:.0f}".split("\n"):
+        naytto.blit(font_pop_up.render(s ,True, (255, 255, 255)), (400, y))
+        y += 36
+
+    pygame.display.flip()
+    pygame.time.wait(3000)
+
 
 # Pythagoras + center points (?)
-dist_to_player = lambda x: math.sqrt(
-    math.pow((x._pos[0] + x.__class__.width/2) - (player._pos[0] + Player.width/2), 2) # x^2
+distance = lambda x, y: math.sqrt(
+    math.pow((x._pos[0] + x.__class__.width/2) - (y._pos[0] + y.__class__.width/2), 2) # x^2
     + 
-    math.pow((x._pos[1] + x.__class__.height/2) - (player._pos[1] + Player.height/2), 2) # y^2
+    math.pow((x._pos[1] + x.__class__.height/2) - (y._pos[1] + y.__class__.height/2), 2) # y^2
 )
 
 class Collectible:
@@ -176,7 +190,7 @@ class Collectible:
             naytto.blit(Collectible.sprites[0], self._pos)
 
     def __get_collected(self):
-        if dist_to_player(self) < 50:
+        if distance(self, player) < 50:
             player._score += self._value
             self._collected = True
 
@@ -198,7 +212,7 @@ class Door():
     def __init__(self):
         self._enabled = False
         self._pos = (randint(0, Door.sx), randint(0, Door.sy))
-
+        
     def update(self):
         global enemies, collectibles
 
@@ -217,8 +231,8 @@ class Door():
         else:
             naytto.blit(Door.sprite, self._pos)
 
-            if dist_to_player(self) < 50:
-                print("yaay, you won!")  
+            if distance(self, player) < 50:
+                return True
 
 class Weapon:
     def __init__(self, chargeable = False):
@@ -341,6 +355,8 @@ class Enemy(Character):
     global naytto
 
     original_timeout = timeout = 120
+    seekout_range = 200
+    hunting_range = 30
 
     # standing still
     sprite = pygame.image.load("hirvio.png")
@@ -362,14 +378,23 @@ class Enemy(Character):
             naytto.blit(Enemy.sprite, self._pos)
 
     def __seek(self):
-        distance = dist_to_player(self)
+        dp = distance(self, player)
 
-        if player._health == 0 or distance > 200:
+        if player._health == 0 or dp > Enemy.seekout_range:
+            for c in collectibles:
+                if c._collected:
+                    continue
+
+                dc = distance(self, c)
+                if dc in range(50, Enemy.seekout_range):
+                    self.__close_in(c,self._speeds[0])
+                    break
+
             self.__idle()
             
         else:
-            if distance > 10:
-                self.__close_in(self._speeds[0 if distance > 100 else 1])
+            if dp > Enemy.hunting_range:
+                self.__close_in(player, self._speeds[0 if dp > 100 else 1])
             else:
                 player._health -= 1 # attack
 
@@ -383,18 +408,18 @@ class Enemy(Character):
         if self._pos[1] + dy in range(0, Enemy.sy):
             self._pos[1] += dy
 
-    def __close_in(self, v: int):
+    def __close_in(self, target, v: int):
         if Enemy.timeout != 0:
             return
 
         # direction x
-        if player._pos[0] > self._pos[0]:
+        if target._pos[0] > self._pos[0]:
             self._pos[0] += v
         else:
             self._pos[0] -= v
 
         # direction y
-        if player._pos[1] > self._pos[1]:
+        if target._pos[1] > self._pos[1]:
             self._pos[1] += v
         else:
             self._pos[1] -= v
@@ -493,12 +518,13 @@ class Player(Character):
                     if ev.key == pygame.K_LSHIFT:
                         self._running = True
                     if ev.key == pygame.K_0:
-                        # CHEATER !!!
+                        # CHEAT CODE HERE!!!
                         global enemies, collectibles
                         for c in collectibles:
                             c._collected = True
                         for e in enemies:
                             e._health = 0
+                        # door should be visible now
                     
                 if ev.type == pygame.KEYUP:
                     if ev.key == pygame.K_w:
@@ -525,6 +551,7 @@ class Player(Character):
                         
                     if ev.button == pygame.BUTTON_RIGHT:
                         self._eyes[1].charging = False
+            
             self.__manage_energy()
         
         self.__translate()
