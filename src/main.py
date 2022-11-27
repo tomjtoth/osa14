@@ -1,7 +1,5 @@
-#TODO:
-# more levels
-# remember stats
-# remember score
+#TODO: implement levels, highscore with local file I/O
+# already went like 30-ish hours into it, lost interest..
 
 import pygame, math
 from random import randint, randrange, choice
@@ -19,7 +17,7 @@ crossh = (0,0)
 main_menu_text = """Keys:
 
 W, A, S, D - up, down, left, right
-H - heal
+TAB - heal while standing still
 LSHIFT - run
 LMB, RMB - charge (takes about 3 seconds) and fire left, right eyes
 
@@ -54,7 +52,8 @@ def main_menu():
             if ev.type == pygame.KEYDOWN:
                 if ev.key == pygame.K_ESCAPE:
                     exit()
-                if ev.key == pygame.K_RETURN:
+                if ev.key == pygame.K_RETURN \
+                or ev.key == pygame.K_r:
                     while new_game():
                         pass # needed for "reset game"
                     __redraw()
