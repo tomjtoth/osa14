@@ -19,6 +19,7 @@ crossh = (0,0)
 main_menu_text = """Keys:
 
 W, A, S, D - up, down, left, right
+H - heal
 LSHIFT - run
 LMB, RMB - charge (takes about 3 seconds) and fire left, right eyes
 
@@ -63,19 +64,23 @@ def main_menu():
 def select_difficulty():
     pass
 
-def new_game(difficulty = 2):
+def new_game():
     
     global player, crossh, ev_list, rendered_texts, enemies, collectibles
 
     rendered_texts = []
     player = Player()
     door = Door()
-    # spawn collectibles 50-50% simple coins vs powerups (I guess?)
     collectibles = [choice([
-        Collectible(), Collectible(), Collectible(), Collectible(), Collectible(), Collectible(), Collectible(),
-        PUEnergy(), PUHealth(), PUMEnergy(), PUMHealth(), PUFirePower(), PUEnergyEfficiency(), PUEnergyRegen()
-        ]) for _ in range(randint(10,20))]
-    
+        # 5 to 10 powerups worth 10 points
+        PUEnergy(), PUMEnergy(), PUHealth(), PUMHealth(),
+        PUFirePower(), PUEnergyEfficiency(), PUEnergyRegen(), 
+        PUHealingEfficiency(), PUHealingRate()
+    ]) for _ in range(randint(5,10))] + [
+        # 10 to 20 simple coins worth 1 point
+        Collectible() for _ in range(randint(10,20))
+    ]
+
     # 2:1 chance for simple Ghost
     enemies = [choice([Ghost(),Ghost(),Nightmare()]) for _ in range(randint(5,10))]
     Ghost.timeout = Ghost.original_timeout
@@ -189,7 +194,6 @@ class Collectible:
             return True
         return False
 
-
 # TODO: repaint each coin with different color based on PowerUp type
 class PowerUp(Collectible):
 
@@ -252,7 +256,7 @@ class PUEnergyEfficiency(PowerUp):
 
     def _get_collected(self):
         if super()._get_collected():
-            player.energy_efficiency /= 2
+            player.energy_efficiency *= 2
             
 class PUEnergyRegen(PowerUp):
     pick_up_txt = render("IMPROVED RECHARGE!")
@@ -260,6 +264,20 @@ class PUEnergyRegen(PowerUp):
     def _get_collected(self):
         if super()._get_collected():
             player.energy_regen *= 2
+             
+class PUHealingEfficiency(PowerUp):
+    pick_up_txt = render("IMPROVED RECHARGE!")
+
+    def _get_collected(self):
+        if super()._get_collected():
+            player.healing_efficiency *= 2
+             
+class PUHealingRate(PowerUp):
+    pick_up_txt = render("IMPROVED RECHARGE!")
+
+    def _get_collected(self):
+        if super()._get_collected():
+            player.healing_rate *= 2
             
 class Door():
     sprite = pygame.image.load("ovi.png")
@@ -278,7 +296,7 @@ class Door():
         for c in collectibles:
             if not c.collected:
                 return False
-        
+
         if not self._enabled:
             self._enabled = True
         else:
@@ -289,7 +307,6 @@ class Door():
             else:
                 return False
         
-
 class Weapon:
     def __init__(self, chargeable = False):
         self.level = 0
@@ -320,58 +337,69 @@ class MovingCharacter:
         # public
         self.energy = self.max_energy = \
         self.health = self.max_health = 1000
+        self._healing = False
         
         # private and inheritable
-        self._up = False
-        self._down = False
-        self._left = False
-        self._right = False
-        self._running = False
+        self._up = self._down = self._left = self._right = self._running = False
         self._speeds = [2, 3]   # walking, running
         self._mov_anim_tick = 0
 
-    # gets inherited, even though it should be in class Player atm
-    def _translate(self):
+    def _moving(self):
+        return self._up or self._down or self._left or self._right
+
+    def _move(self):
         sx = Player.sx if isinstance(self, Player) else Ghost.sx
         sy = Player.sy if isinstance(self, Player) else Ghost.sy
         v = self._speeds[1 if self._running else 0]
-        state = 0
-
-        if self._up:
-            if self.pos[1] - v >= 0:
-                self.pos[1] -= v
-            else:
-                self._up = False
-
-        if self._down:
-            if self.pos[1] + v <= sy:
-                self.pos[1] += v
-            else:
-                self._down = False
-
-        if self._left:
-            if self.pos[0] - v >=0:
-                self.pos[0] -= v
-            else:
-                self._left = False
-
-        if self._right:
-            if self.pos[0] + v <= sx:
-                self.pos[0] += v
-            else:
-                self._right = False
         
-        if self._left or self._right or self._up or self._down:
-            state += 1
-            self._mov_anim_tick += 1
+        if self.health > 0:
+            # standing still
+            state = 0
+
+            if self._up:
+                if self.pos[1] - v >= 0:
+                    self.pos[1] -= v
+                else:
+                    self._up = False
+
+            if self._down:
+                if self.pos[1] + v <= sy:
+                    self.pos[1] += v
+                else:
+                    self._down = False
+
+            if self._left:
+                if self.pos[0] - v >=0:
+                    self.pos[0] -= v
+                else:
+                    self._left = False
+
+            if self._right:
+                if self.pos[0] + v <= sx:
+                    self.pos[0] += v
+                else:
+                    self._right = False
             
-            if self._running:
+            if self._moving():
                 state += 1
-        else:
-            self._mov_anim_tick = 0
+                self._mov_anim_tick += 1
+                
+                if self._running:
+                    state += 1
+            else:
+                self._mov_anim_tick = 0
         
-        return state
-  
+            return state
+        else:
+            return -1
+
+    def dying(self):
+        rendered_texts.append([
+            choice(self.__class__.yells),    # the pre-rendered text itself
+            self,                            # the text will be positioned in relation to this object:
+            100                              # n frames to show the text near the robot
+        ])
+
 class Ghost(MovingCharacter):
 
     original_timeout = timeout = 120
@@ -416,7 +444,7 @@ class Ghost(MovingCharacter):
             else:
                 player.health -= 1 # attack
                 if player.health <= 0:
-                    player.dies()
+                    player.dying()
 
     def __idle(self):
         dx = choice([-self._speeds[0], 0, self._speeds[0]])
@@ -451,18 +479,10 @@ class Ghost(MovingCharacter):
         self.health -= Eye.cost*player.fire_power*2
         # dying
         if self.health <= 0:
-            # choosing pre-rendered text
-            txt = choice(self.__class__.yells)
+            self.dying()
             player.score += 50
         else:
-            # rendering on the fly
-            txt = render(f"{self.health}/{self.max_health}")
-
-        rendered_texts.append([
-            txt,    # the pre-rendered text itself
-            self,   # the text will be positioned in relation to this object
-            15      # n frames to show the text near the object
-        ])
+            rendered_texts.append([render(f"{self.health}/{self.max_health}"), self, 15])
 
 # TODO: repaint sprite, or not? it's actually better to not know which one is the long range...
 class Nightmare(Ghost):
@@ -500,11 +520,11 @@ class Player(MovingCharacter):
         self.pos = [randint(0, Player.sx), randint(0, Player.sy)]
         self.fire_power = 1
         self.energy_efficiency = 1
-
-    def __translate(self):
-        if self.health > 0:
-            state = super()._translate()
+        self.healing_rate = 1
+        self.healing_efficiency = 5        
             
+    def __redraw(self, state: int):
+        if self.health > 0:
             # standing still
             if state == 0:
                 spr = Player.sprites[0][0]
@@ -523,61 +543,74 @@ class Player(MovingCharacter):
         # draw the character
         naytto.blit(spr, (self.pos[0], self.pos[1]))
 
-    def update(self):
+    def __process_events(self):
         global ev_list
+        for ev in ev_list:
+            if ev.type == pygame.KEYDOWN:
+                if ev.key == pygame.K_w:
+                    self._up = True
+                if ev.key == pygame.K_s:
+                    self._down = True
+                if ev.key == pygame.K_a:
+                    self._left = True
+                if ev.key == pygame.K_d:
+                    self._right = True
+                if ev.key == pygame.K_TAB:
+                    self._healing = True
+                if ev.key == pygame.K_LSHIFT:
+                    self._running = True
+                if ev.key == pygame.K_0:
+                    # CHEAT CODE HERE!!!
+                    global enemies, collectibles
+                    for c in collectibles:
+                        c.collected = True
+                    for e in enemies:
+                        e.health = 0
+                    # door should be visible now
+                
+            if ev.type == pygame.KEYUP:
+                if ev.key == pygame.K_w:
+                    self._up = False
+                if ev.key == pygame.K_s:
+                    self._down = False
+                if ev.key == pygame.K_a:
+                    self._left = False
+                if ev.key == pygame.K_d:
+                    self._right = False
+                if ev.key == pygame.K_TAB:
+                    self._healing = False
+                if ev.key == pygame.K_LSHIFT:
+                    self._running = False
 
-        if self.health > 0:
-            for ev in ev_list:
-                if ev.type == pygame.KEYDOWN:
-                    if ev.key == pygame.K_w:
-                        self._up = True
-                    if ev.key == pygame.K_s:
-                        self._down = True
-                    if ev.key == pygame.K_a:
-                        self._left = True
-                    if ev.key == pygame.K_d:
-                        self._right = True
-                    if ev.key == pygame.K_LSHIFT:
-                        self._running = True
-                    if ev.key == pygame.K_0:
-                        # CHEAT CODE HERE!!!
-                        global enemies, collectibles
-                        for c in collectibles:
-                            c.collected = True
-                        for e in enemies:
-                            e.health = 0
-                        # door should be visible now
+            if ev.type == pygame.MOUSEBUTTONDOWN:
+                if ev.button == pygame.BUTTON_LEFT:
+                    self.eyes[0].charging = True
+
+                if ev.button == pygame.BUTTON_RIGHT:
+                    self.eyes[1].charging = True
+
+            if ev.type == pygame.MOUSEBUTTONUP:
+                if ev.button == pygame.BUTTON_LEFT:
+                    self.eyes[0].charging = False
                     
-                if ev.type == pygame.KEYUP:
-                    if ev.key == pygame.K_w:
-                        self._up = False
-                    if ev.key == pygame.K_s:
-                        self._down = False
-                    if ev.key == pygame.K_a:
-                        self._left = False
-                    if ev.key == pygame.K_d:
-                        self._right = False
-                    if ev.key == pygame.K_LSHIFT:
-                        self._running = False
+                if ev.button == pygame.BUTTON_RIGHT:
+                    self.eyes[1].charging = False
 
-                if ev.type == pygame.MOUSEBUTTONDOWN:
-                    if ev.button == pygame.BUTTON_LEFT:
-                        self.eyes[0].charging = True
-
-                    if ev.button == pygame.BUTTON_RIGHT:
-                        self.eyes[1].charging = True
-
-                if ev.type == pygame.MOUSEBUTTONUP:
-                    if ev.button == pygame.BUTTON_LEFT:
-                        self.eyes[0].charging = False
-                        
-                    if ev.button == pygame.BUTTON_RIGHT:
-                        self.eyes[1].charging = False
-            
+    def update(self):
+        if self.health > 0:
+            self.__process_events()
             self.__manage_energy()
-        
-        self.__translate()
+        self.__redraw(self._move())
+        self.__ready_weapons()
+        self.__heal()
     
+    def __heal(self):
+        if not self._moving() and self._healing \
+        and self.energy - self.healing_efficiency > 0 \
+        and self.health + self.healing_rate < self.max_health:
+            self.health += self.healing_rate
+            self.energy -= self.healing_efficiency
+
     def __shoot(self, eye: Eye):
         global rendered_texts, enemies
         
@@ -588,17 +621,13 @@ class Player(MovingCharacter):
         else:
             pos = eye.pos[0]
 
-        # draw frikkin "LASER BEAM" (line from the eye to the mouse cursor)
+        # draw LASER BEAM
         pygame.draw.line(naytto, (255, 0, 0)
             , (self.pos[0]+pos[0], self.pos[1]+pos[1])
             , crossh
             , 10)
 
-        rendered_texts.append([
-            choice(eye.effects),     # firing sound made visible
-            self,                   # the text will be positioned in relation to this object:
-            15                      # n frames to show the text near the robot
-        ])
+        rendered_texts.append([choice(eye.effects), self, 15])
 
         for enemy in enemies:
             if crossh[0] in range(enemy.pos[0], enemy.pos[0] + Ghost.width) \
@@ -607,25 +636,12 @@ class Player(MovingCharacter):
                 enemy.got_shot()
                 
                 break # 1 shot is for 1 ghost only, would be too easy otherwise...
-        
-    def __manage_energy(self):
-        
-        moving = self._up or self._down or self._left or self._right
-        
-        # regenerating energy while standing still
-        if self.energy < self.max_energy and not moving:
-            self.energy += self.energy_regen
 
-        if self._running and moving:
-            if self.energy > 0:
-                self.energy -= self.energy_regen * 2
-            else:
-                self._running = False
-
+    def __ready_weapons(self):
         for eye in self.eyes:
             if eye.charging:
                 if self.energy > 0:
-                    self.energy -= 1 * self.energy_efficiency
+                    self.energy -= 1 / self.energy_efficiency
                     eye.level += 1
                 else:
                     eye.charging = False
@@ -638,12 +654,16 @@ class Player(MovingCharacter):
                 if eye.level -1 >= 0:
                     eye.level -= 1
 
-    def dies(self):
-        rendered_texts.append([
-            choice(self.__class__.yells),    # the pre-rendered text itself
-            self,                            # the text will be positioned in relation to this object:
-            100                              # n frames to show the text near the robot
-        ])
+    def __manage_energy(self):
+        # regenerating energy while standing still
+        if self.energy < self.max_energy and not self._moving():
+            self.energy += self.energy_regen
+
+        if self._running and self._moving():
+            if self.energy > 0:
+                self.energy -= self.energy_regen * 2
+            else:
+                self._running = False
 
 # TODO
 class SomethingFunny(MovingCharacter):
